@@ -1,18 +1,119 @@
 <!DOCTYPE html>
-
 <html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Send My Location & Device Info</title>
+</head>
+<body>
+    <h2>Send Your Location & Device Details</h2>
 
-    <head>
-        <title>geolocation</title>
-    </head>
+    <!--
+      1. We ask the user to type in their email (the “owner email”).
+      2. When they click “Send Info,” we grab geolocation + navigator.userAgent.
+      3. Then we POST everything to send_location.php.
+    -->
+    <form id="infoForm">
+        <label for="ownerEmail">Your Email Address:</label><br />
+        <input
+            type="email"
+            id="ownerEmail"
+            name="ownerEmail"
+            placeholder="you@example.com"
+            required
+        /><br /><br />
 
-    <body>
-        <script>
+        <button type="submit">Send My Location & Device Info</button>
+    </form>
 
-            navigator.geolocation.getCurrentPosition(function (position) {
-                document.write(position.coords.latitude + ", " + position.coords.longitude);
-            });
-        </script>
-    </body>
+    <p id="status"></p>
 
+    <script>
+        // --------------- Helper: getDeviceInfo() ---------------
+        // Returns a string describing basic device/browser info.
+        function getDeviceInfo() {
+            const ua = navigator.userAgent;
+            const platform = navigator.platform;
+            // You can add more fields: screen resolution, language, etc.
+            return `User-Agent: ${ua}\nPlatform: ${platform}`;
+        }
+
+        // ------------- When the user submits the form -------------
+        document.getElementById("infoForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+            const emailField = document.getElementById("ownerEmail");
+            const ownerEmail = emailField.value.trim();
+            const statusP = document.getElementById("status");
+
+            if (!ownerEmail) {
+                statusP.textContent = "Please enter a valid email address.";
+                return;
+            }
+
+            // Show a “fetching location” status:
+            statusP.textContent = "Obtaining your location…";
+
+            // 1. Ask for geolocation
+            if (!navigator.geolocation) {
+                statusP.textContent = "Geolocation is not supported by your browser.";
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+                    // Success callback: we have coords
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const deviceInfo = getDeviceInfo();
+
+                    // Build the payload to send to the server
+                    const payload = {
+                        ownerEmail: ownerEmail,
+                        latitude: lat,
+                        longitude: lon,
+                        deviceInfo: deviceInfo,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    statusP.textContent = "Sending info to server…";
+
+                    // 2. POST to PHP endpoint
+                    fetch("send_location.php", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                        .then(function (res) {
+                            return res.json();
+                        })
+                        .then(function (json) {
+                            if (json.success) {
+                                statusP.textContent = "✅ Your info was sent!";
+                            } else {
+                                statusP.textContent = "❌ Failed: " + json.error;
+                            }
+                        })
+                        .catch(function (err) {
+                            console.error(err);
+                            statusP.textContent = "❌ Error sending data.";
+                        });
+                },
+                function (err) {
+                    // Error callback from getCurrentPosition
+                    console.error(err);
+                    statusP.textContent =
+                        "Unable to retrieve location. Make sure location access is allowed.";
+                },
+                {
+                    // Optional options: highAccuracy, timeout, etc.
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        });
+    </script>
+</body>
 </html>
